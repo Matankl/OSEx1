@@ -1,0 +1,118 @@
+        -:    0:Source:Dijkstra.cpp
+        -:    0:Graph:Dijkstra.gcno
+        -:    0:Data:Dijkstra.gcda
+        -:    0:Runs:1
+        -:    1:// C++ program for Dijkstra's single source shortest path
+        -:    2:// algorithm. The program is for adjacency matrix
+        -:    3:// representation of the graph
+        -:    4:#include <iostream>
+        -:    5:using namespace std;
+        -:    6:#include <limits.h>
+        -:    7:
+        -:    8:// Number of vertices in the graph
+        -:    9:#define V 9
+        -:   10:
+        -:   11:// A utility function to find the vertex with minimum
+        -:   12:// distance value, from the set of vertices not yet included
+        -:   13:// in shortest path tree
+        8:   14:int minDistance(int dist[], bool sptSet[])
+        -:   15:{
+        -:   16:
+        -:   17:	// Initialize min value
+        8:   18:	int min = INT_MAX, min_index;
+        -:   19:
+       80:   20:	for (int v = 0; v < V; v++)
+       72:   21:		if (sptSet[v] == false && dist[v] <= min)
+       18:   22:			min = dist[v], min_index = v;
+        -:   23:
+        8:   24:	return min_index;
+        -:   25:}
+        -:   26:
+        -:   27:// A utility function to print the constructed distance
+        -:   28:// array
+        1:   29:void printSolution(int dist[])
+        -:   30:{
+        1:   31:	cout << "Vertex \t Distance from Source" << endl;
+       10:   32:	for (int i = 0; i < V; i++)
+        9:   33:		cout << i << " \t\t\t\t" << dist[i] << endl;
+        1:   34:}
+        -:   35:
+        -:   36:// Function that implements Dijkstra's single source
+        -:   37:// shortest path algorithm for a graph represented using
+        -:   38:// adjacency matrix representation
+        1:   39:void dijkstra(int graph[V][V], int src)
+        -:   40:{
+        -:   41:	int dist[V]; // The output array. dist[i] will hold the
+        -:   42:				// shortest
+        -:   43:	// distance from src to i
+        -:   44:
+        -:   45:	bool sptSet[V]; // sptSet[i] will be true if vertex i is
+        -:   46:					// included in shortest
+        -:   47:	// path tree or shortest distance from src to i is
+        -:   48:	// finalized
+        -:   49:
+        -:   50:	// Initialize all distances as INFINITE and stpSet[] as
+        -:   51:	// false
+       10:   52:	for (int i = 0; i < V; i++)
+        9:   53:		dist[i] = INT_MAX, sptSet[i] = false;
+        -:   54:
+        -:   55:	// Distance of source vertex from itself is always 0
+        1:   56:	dist[src] = 0;
+        -:   57:
+        -:   58:	// Find shortest path for all vertices
+        9:   59:	for (int count = 0; count < V - 1; count++) {
+        -:   60:		// Pick the minimum distance vertex from the set of
+        -:   61:		// vertices not yet processed. u is always equal to
+        -:   62:		// src in the first iteration.
+        8:   63:		int u = minDistance(dist, sptSet);
+        -:   64:
+        -:   65:		// Mark the picked vertex as processed
+        8:   66:		sptSet[u] = true;
+        -:   67:
+        -:   68:		// Update dist value of the adjacent vertices of the
+        -:   69:		// picked vertex.
+       80:   70:		for (int v = 0; v < V; v++)
+        -:   71:
+        -:   72:			// Update dist[v] only if is not in sptSet,
+        -:   73:			// there is an edge from u to v, and total
+        -:   74:			// weight of path from src to v through u is
+        -:   75:			// smaller than current value of dist[v]
+       72:   76:			if (!sptSet[v] && graph[u][v]
+       36:   77:				&& dist[u] != INT_MAX
+       36:   78:				&& dist[u] + graph[u][v] < dist[v])
+       17:   79:				dist[v] = dist[u] + graph[u][v];
+        -:   80:	}
+        -:   81:
+        -:   82:	// print the constructed distance array
+        1:   83:	printSolution(dist);
+        1:   84:}
+        -:   85:
+        -:   86:// driver's code
+        1:   87:int main()
+        -:   88:{
+        -:   89:
+        -:   90:	// Get 9*9 graph from the user make sure to enter 0 for the diagonal elements and positive values for the rest
+        -:   91:	int graph[V][V];
+        1:   92:	cout << "Enter the graph- diagonal is automatically 0 and the rest is positive " << endl;
+        -:   93:
+       10:   94:	for (int i = 0; i < V; ++i) {
+       90:   95:        for (int j = 0; j < V; ++j) {
+        -:   96:            int num;
+        -:   97:            // Prompt the user until a valid input is entered
+        -:   98:            do {
+       83:   99:                cout << "Enter a positive integer for element (" << i << ", " << j << "): ";
+       83:  100:            } while (!(cin >> num) || num <= 0);
+        -:  101:            // Assign the valid input to the matrix
+       81:  102:            graph[i][j] = num;
+        -:  103:        }
+        -:  104:    }
+        -:  105: 
+        -:  106:
+        -:  107:
+        -:  108:	// Function call
+        1:  109:	dijkstra(graph, 0);
+        -:  110:
+        1:  111:	return 0;
+        -:  112:}
+        -:  113:
+        -:  114:// This code is contributed to geeks for geeks by shivanisinghss2110 and modified here by Matankl

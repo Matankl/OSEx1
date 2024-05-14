@@ -87,20 +87,22 @@ void dijkstra(int graph[V][V], int src)
 int main()
 {
 
-	// Get 9*9 graph from the user
-	int graph[9][9]; 
+	// Get 9*9 graph from the user make sure to enter 0 for the diagonal elements and positive values for the rest
+	int graph[V][V];
+	cout << "Enter the graph- diagonal is automatically 0 and the rest is positive " << endl;
 
-	cout << "Enter the graph in the form of 9*9 matrix: " << endl;
-	for (int i = 0; i < V; i++)
-	{
-		for (int j = 0; j < V; j++)
-		{
-			cin >> graph[i][j];
-		}
-	}
-
-
-
+	for (int i = 0; i < V; ++i) {
+        for (int j = 0; j < V; ++j) {
+            int num;
+            // Prompt the user until a valid input is entered
+            do {
+                cout << "Enter a positive integer for element (" << i << ", " << j << "): ";
+            } while (!(cin >> num) || num <= 0);
+            // Assign the valid input to the matrix
+            graph[i][j] = num;
+        }
+    }
+ 
 
 
 	// Function call
@@ -109,4 +111,4 @@ int main()
 	return 0;
 }
 
-// This code is contributed to geeks for geeks by shivanisinghss2110 and updated here by Matankl
+// This code is contributed to geeks for geeks by shivanisinghss2110 and modified here by Matankl
