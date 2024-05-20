@@ -3,7 +3,7 @@
 #include <string>
 #include <cmath>
 #include "PoissonMethod.hpp"
-#include <libpoisson.so>
+
 
 
 
