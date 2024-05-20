@@ -1,9 +1,10 @@
 #include <iostream>
+#include <stdio.h>
 
 int main() {
-    //accessing unlocated memory using array index
-    int arr[5] = {1, 2, 3, 4, 5};
-    std::cout << arr[6] << std::endl;
+    //accessing memory that is not allocated
+    int *p = (int*)0;
+    printf("%d\n", *p); // Segmentation fault (core dumped)
 
     return 0;
 }

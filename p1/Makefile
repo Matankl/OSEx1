@@ -27,7 +27,7 @@
 
 
 CC = gcc
-CFLAGS = -g3
+CFLAGS = 
 LDFLAGS = -lstdc++
 
 all: MainStackOF MainMemoryFail MainDivBy0 
