@@ -26,7 +26,7 @@
 # 	rm -f *.o *.a MainStackOF MainMemoryFail MainDivBy0 
 
 
-CC = gdb
+CC = gcc
 CFLAGS = -g3
 LDFLAGS = -lstdc++
 
