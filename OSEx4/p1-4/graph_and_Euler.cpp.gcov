@@ -1,0 +1,83 @@
+        -:    0:Source:graph_and_Euler.cpp
+        -:    0:Graph:graph_and_Euler.gcno
+        -:    0:Data:graph_and_Euler.gcda
+        -:    0:Runs:1
+        -:    1:#include "Graph.hpp"
+        -:    2:
+        -:    3:// Constructor to initialize the graph with a given number of vertices
+        1:    4:Graph::Graph(int v) : vertices(v) {}
+        -:    5:
+        -:    6:// Function to add an edge between two vertices (undirected graph)
+        6:    7:void Graph::addEdge(int u, int v) {
+        6:    8:    adjList[u].push_back(v); // Add v to u's list
+        6:    9:    adjList[v].push_back(u); // Add u to v's list
+        6:   10:}
+        -:   11:
+        -:   12:// Function to display the graph
+        1:   13:void Graph::displayGraph() const {
+        4:   14:    for (auto &pair : adjList) {
+        3:   15:        std::cout << pair.first << ": ";
+       15:   16:        for (int neighbor : pair.second) {
+       12:   17:            std::cout << neighbor << " ";
+        -:   18:        }
+        3:   19:        std::cout << std::endl;
+        -:   20:    }
+        1:   21:}
+        -:   22:
+        -:   23:// Getter for the adjacency list
+        1:   24:const std::unordered_map<int, std::list<int>> &Graph::getAdjList() const {
+        1:   25:    return adjList;
+        -:   26:}
+        -:   27:
+        -:   28:// Function to determine if a graph has an Eulerian circuit
+        1:   29:bool Graph::isEulerian() const {
+        -:   30:    // Get adjacency list of the graph
+        1:   31:    const auto &adjList = getAdjList();
+        -:   32:
+        -:   33:    // Map to track visited vertices
+        1:   34:    std::unordered_map<int, bool> visited;
+        4:   35:    for (const auto &pair : adjList) {
+        3:   36:        visited[pair.first] = false; // Initialize all vertices as unvisited
+        -:   37:    }
+        -:   38:
+        -:   39:    // Lambda function for Depth First Search (DFS)
+        3:   40:    auto dfs = [&](int node, auto &&dfsRef) -> void {
+        3:   41:        visited[node] = true; // Mark the current node as visited
+       15:   42:        for (int neighbor : adjList.at(node)) {
+       12:   43:            if (!visited[neighbor]) {
+        2:   44:                dfsRef(neighbor, dfsRef); // Recursively visit neighbors
+        -:   45:            }
+        -:   46:        }
+        3:   47:    };
+        -:   48:
+        -:   49:    // Find the first vertex with edges to start the DFS
+        1:   50:    int startVertex = -1;
+       1*:   51:    for (const auto &pair : adjList) {
+        1:   52:        if (!pair.second.empty()) { // Vertex has at least one edge
+        1:   53:            startVertex = pair.first;
+        1:   54:            break;
+        -:   55:        }
+        -:   56:    }
+        -:   57:
+        -:   58:    // If no edges exist, the graph is trivially Eulerian
+       1*:   59:    if (startVertex == -1) return true;
+        -:   60:
+        -:   61:    // Perform DFS to check connectivity
+        1:   62:    dfs(startVertex, dfs);
+        -:   63:
+        -:   64:    // Ensure all vertices with edges are visited
+        4:   65:    for (const auto &pair : adjList) {
+       3*:   66:        if (!pair.second.empty() && !visited[pair.first]) {
+    #####:   67:            return false; // Not connected
+        -:   68:        }
+        -:   69:    }
+        -:   70:
+        -:   71:    // Check if all vertices have an even degree
+        4:   72:    for (const auto &pair : adjList) {
+        3:   73:        if (pair.second.size() % 2 != 0) {
+    #####:   74:            return false; // Vertex has an odd degree
+        -:   75:        }
+        -:   76:    }
+        -:   77:
+        1:   78:    return true; // All conditions satisfied, Eulerian circuit exists
+        1:   79:}

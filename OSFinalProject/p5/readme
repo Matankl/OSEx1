@@ -1,0 +1,166 @@
+
+
+pipline:
+
+[ Client ] -- commands --> [ Network Thread ] --> [ Task Queue ] --> [ Active Object Thread ] -- results -->
+               ^                                                                      |
+               \---------------------------------------(via future/promise or callback)-------------------/
+
+
+
+
+
+
+
+
+
+
+
+
+Leader-Follower:
+
+The Leader-Follower pattern describes a pool of threads where:
+
+    One thread is designated the “leader”, which waits for incoming events (e.g., new connections or new data).
+    When an event arrives, the leader becomes a “follower” to process that event, while one of the idle threads becomes the new leader to wait for the next event.
+    Threads rotate roles between leader and follower.
+
+
+
+
+
+
+
+
+
+Pipeline + Active Object (Part A):
+
+    The server’s main thread handles network I/O (accepting a connection, reading commands).
+    Each command is handed off to an active object (a background thread that processes MST tasks).
+    When done, the active object immediately writes the result back to the client.
+    This is beneficial if the MST operations are CPU-heavy and you don’t want to block the network thread.
+
+Leader-Follower (Part B):
+
+    A pool of threads revolve between being a leader (calling accept()) and a follower (waiting).
+    When a client is accepted, the same thread processes that client. Another thread becomes the new leader.
+    Good for scaling to multiple clients without having a dedicated thread per client, and avoids the overhead of handing off between accept and processing.
+    The MST commands in this example are processed synchronously in the same thread that accepted the client. If you wanted a separate pipeline for MST, you could combine the patterns, but that’s more advanced.
+
+
+
+./server_pipeline
+./client
+
+CREATE_GRAPH 5
+ADD_EDGE 0 1 2.0
+ADD_EDGE 0 2 3.0
+ADD_EDGE 1 2 1.0
+ADD_EDGE 1 3 4.0
+ADD_EDGE 2 4 5.0
+ADD_EDGE 3 4 1.0
+SET_ALG KRUSKAL
+BUILD_MST
+GET_WEIGHT
+GET_DIAMETER
+GET_AVG_DIST
+QUIT
+
+
+
+
+
+
+./server_leader_follower
+./client
+
+CREATE_GRAPH 5
+ADD_EDGE 0 1 2.0
+ADD_EDGE 0 2 3.0
+ADD_EDGE 1 2 1.0
+ADD_EDGE 1 3 4.0
+ADD_EDGE 2 4 5.0
+ADD_EDGE 3 4 1.0
+SET_ALG KRUSKAL
+BUILD_MST
+GET_WEIGHT
+GET_DIAMETER
+GET_AVG_DIST
+QUIT
+
+
+
+
+
+this is how the run went:
+(the folder is or becuse i dont use my pesonal computer i use the computer from work)
+
+
+(base) or@or:~/Desktop/OSFin/OSFinalProject/p5$ ./server_pipeline
+[Server] Pipeline/ActiveObject server listening on port 12345...
+[Server] Client connected.
+
+(base) or@or:~/Desktop/OSFin/OSFinalProject$ cd p5
+(base) or@or:~/Desktop/OSFin/OSFinalProject/p5$ ./client
+[Client] Connected to 127.0.0.1:12345
+Enter command: CREATE_GRAPH 5
+ADD_EDGE 0 1 2.0
+ADD_EDGE 0 2 3.0
+AServer: Graph created with 5 vertices.
+Enter command: Server: Edge added (0,1), w=2.000000
+Enter command: Server: Edge added (0,2), w=3.000000
+Enter command: DD_EDGE 1 2 1.0
+ADD_EDGE 1 3 4.0
+ADD_EDGE 2 4 5.0
+Server: Edge added (1,2), w=1.000000
+Enter command: Server: Edge added (1,3), w=4.000000
+Enter command: Server: Edge added (2,4), w=5.000000
+Enter command: ADD_EDGE 3 4 1.0
+SET_ALG KRUSKAL
+BUILD_MST
+GET_WEIServer: Edge added (3,4), w=1.000000
+Enter command: Server: Algorithm set to KRUSKAL
+Enter command: Server: MST built successfully.
+Enter command: GHT
+GET_DIAMETER
+GET_AVG_DIST
+QUITServer: MST Weight = 8.000000
+Enter command: Server: MST Diameter = 7.000000
+Enter command: Server: MST Average Distance = 3.200000
+Enter command: QUIT
+
+
+
+
+
+(base) or@or:~/Desktop/OSFin/OSFinalProject/p5$ ./server_leader_follower
+[Server] Leader-Follower server listening on 12345
+[Server] Press Enter to stop...
+
+(base) or@or:~/Desktop/OSFin/OSFinalProject/p5$ ./client
+[Client] Connected to 127.0.0.1:12345
+Enter command: CREATE_GRAPH 5
+ADD_EDGE 0 1 2.0
+ADD_EDGE 0 2 3.0
+AServer: Graph created with 5 vertices.
+Enter command: Server: Edge added.
+Enter command: Server: Edge added.
+Enter command: DD_EDGE 1 2 1.0
+ADD_EDGE 1 3 4.0
+ADD_EDGE 2 4 5.0
+Server: Edge added.
+Enter command: Server: Edge added.
+Enter command: Server: Edge added.
+Enter command: ADD_EDGE 3 4 1.0
+SET_ALG KRUSKAL
+BUILD_MST
+GET_WEIServer: Edge added.
+Enter command: Server: Algorithm set to KRUSKAL
+Enter command: Server: MST built.
+Enter command: GHT
+GET_DIAMETER
+GET_AVG_DIST
+QUITServer: MST Weight = 8.000000
+Enter command: Server: MST Diameter = 7.000000
+Enter command: Server: MST Avg Dist = 3.200000
+Enter command: QUIT

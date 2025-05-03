@@ -1,0 +1,73 @@
+        -:    0:Source:mainRandom.cpp
+        -:    0:Graph:mainRandom.gcno
+        -:    0:Data:mainRandom.gcda
+        -:    0:Runs:1
+        -:    1:#include "Graph.hpp"
+        -:    2:#include <iostream>
+        -:    3:#include <cstdlib>
+        -:    4:#include <ctime>
+        -:    5:#include <unistd.h> // For getopt
+        -:    6:
+    #####:    7:void printUsage(const char *programName) {
+    #####:    8:    std::cout << "Usage: " << programName << " -v <vertices> -e <edges> -s <seed>\n";
+    #####:    9:    std::cout << "  -v: Number of vertices\n";
+    #####:   10:    std::cout << "  -e: Number of edges\n";
+    #####:   11:    std::cout << "  -s: Random seed (optional)\n";
+    #####:   12:}
+        -:   13:
+        1:   14:int main(int argc, char *argv[]) {
+        1:   15:    int vertices = 0, edges = 0, seed = time(nullptr); // Default seed is current time
+        1:   16:    int opt;
+        -:   17:
+        -:   18:    // Parse command-line arguments
+        4:   19:    while ((opt = getopt(argc, argv, "v:e:s:")) != -1) {
+        3:   20:        switch (opt) {
+        1:   21:            case 'v':
+        1:   22:                vertices = std::atoi(optarg);
+        1:   23:                break;
+        1:   24:            case 'e':
+        1:   25:                edges = std::atoi(optarg);
+        1:   26:                break;
+        1:   27:            case 's':
+        1:   28:                seed = std::atoi(optarg);
+        1:   29:                break;
+    #####:   30:            default:
+    #####:   31:                printUsage(argv[0]);
+        -:   32:                return 1;
+        -:   33:        }
+        -:   34:    }
+        -:   35:    // in case of missing arguments or invalid values
+        1:   36:    if (vertices <= 0 || edges < 0) {
+    #####:   37:        printUsage(argv[0]);
+    #####:   38:        return 1;
+        -:   39:    }
+        -:   40:
+        -:   41:    // Seed the random number generator
+        1:   42:    std::srand(seed);
+        -:   43:
+        -:   44:    // Create a graph with the specified number of vertices
+        2:   45:    Graph graph(vertices);
+        -:   46:
+        -:   47:    // Generate random edges
+        7:   48:    for (int i = 0; i < edges; ++i) {
+        6:   49:        int u = std::rand() % vertices;
+        6:   50:        int v = std::rand() % vertices;
+       10:   51:        while (v == u) { // Avoid self-loops
+        4:   52:            v = std::rand() % vertices;
+        -:   53:        }
+        6:   54:        graph.addEdge(u, v);
+        -:   55:    }
+        -:   56:
+        -:   57:    // Display the generated graph
+        1:   58:    std::cout << "Generated Graph:\n";
+        1:   59:    graph.displayGraph();
+        -:   60:
+        -:   61:    // Check if the graph has an Eulerian circuit
+        1:   62:    if (graph.isEulerian()) {
+        1:   63:        std::cout << "The graph has an Eulerian circuit.\n";
+        -:   64:    } else {
+    #####:   65:        std::cout << "The graph does NOT have an Eulerian circuit.\n";
+        -:   66:    }
+        -:   67:
+        1:   68:    return 0;
+        -:   69:}

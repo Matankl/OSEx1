@@ -1,0 +1,25 @@
+this is how to run the app:
+
+./mainRandom -v 3 -e 6 -s 42
+
+
+
+code covrage commands:
+matankl@matankl-VMware-Virtual-Platform:~/code/OSEx4/p3$ make all
+
+
+matankl@matankl-VMware-Virtual-Platform:~/code/OSEx4/p3$ ./mainRandom -v 3 -e 6 -s 5413
+
+
+matankl@matankl-VMware-Virtual-Platform:~/code/OSEx4/p3$ gcov mainRandom.cpp
+
+File-to-eval 'mainRandom.cpp'
+File-to-eval 'Graph.hpp'
+
+
+matankl@matankl-VMware-Virtual-Platform:~/code/OSEx4/p3$ gcov graph_and_Euler.cpp
+File-to-eval 'graph_and_Euler.cpp'
+
+valgrind:
+
+matankl@matankl-VMware-Virtual-Platform:~/code/OSEx4/p3$ valgrind --leak-check=full ./mainRandom -v 3 -e 6 -s 42

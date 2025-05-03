@@ -1,0 +1,165 @@
+client valgrind report with pipeline:
+
+(base) or@or:~/Desktop/OSFin/OSFinalProject/p5$ valgrind --leak-check=full --show-leak-kinds=all ./client
+==137195== Memcheck, a memory error detector
+==137195== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==137195== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==137195== Command: ./client
+==137195== 
+[Client] Connected to server at 127.0.0.1:12345
+Enter command (or QUIT/EXIT): CREATE_GRAPH 5
+ADD_EDGE 0 1 2.0
+ADD_EDGE 0 2 3.0
+ADD_EDGE 1 2 1.0
+ADD_EDGE 1 3 4.0
+ADD_EDGE 2 4 5.0
+ADD_EDGE 3 4 1.0
+SET_ALG KRUSKAL
+BUILD_MST
+GET_WEIGHT
+GET_DIAMETER
+GET_AVG_DIST
+QUIT[Server Reply] Graph created with 5 vertices.
+
+Enter command (or QUIT/EXIT): [Server Reply] Edge added (0,1), w=2.000000
+
+Enter command (or QUIT/EXIT): [Server Reply] Edge added (0,2), w=3.000000
+
+Enter command (or QUIT/EXIT): [Server Reply] Edge added (1,2), w=1.000000
+
+Enter command (or QUIT/EXIT): [Server Reply] Edge added (1,3), w=4.000000
+
+Enter command (or QUIT/EXIT): [Server Reply] Edge added (2,4), w=5.000000
+
+Enter command (or QUIT/EXIT): [Server Reply] Edge added (3,4), w=1.000000
+
+Enter command (or QUIT/EXIT): [Server Reply] Algorithm set to KRUSKAL
+
+Enter command (or QUIT/EXIT): [Server Reply] MST built successfully.
+
+Enter command (or QUIT/EXIT): [Server Reply] MST Weight = 8.000000
+
+Enter command (or QUIT/EXIT): [Server Reply] MST Diameter = 7.000000
+
+Enter command (or QUIT/EXIT): [Server Reply] MST Average Distance = 3.200000
+
+Enter command (or QUIT/EXIT): QUIT
+[Client] Closing.
+==137195== 
+==137195== HEAP SUMMARY:
+==137195==     in use at exit: 0 bytes in 0 blocks
+==137195==   total heap usage: 10 allocs, 10 frees, 74,969 bytes allocated
+==137195== 
+==137195== All heap blocks were freed -- no leaks are possible
+==137195== 
+==137195== For lists of detected and suppressed errors, rerun with: -s
+==137195== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+
+
+server_pipeline valgrind report:
+
+(base) or@or:~/Desktop/OSFin/OSFinalProject/p5$ valgrind --leak-check=full --show-leak-kinds=all ./server_pipeline
+==137122== Memcheck, a memory error detector
+==137122== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==137122== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==137122== Command: ./server_pipeline
+==137122== 
+[Server] Pipeline/ActiveObject server listening on port 12345...
+[Server] Client connected.
+==137122== 
+==137122== HEAP SUMMARY:
+==137122==     in use at exit: 0 bytes in 0 blocks
+==137122==   total heap usage: 125 allocs, 125 frees, 83,023 bytes allocated
+==137122== 
+==137122== All heap blocks were freed -- no leaks are possible
+==137122== 
+==137122== For lists of detected and suppressed errors, rerun with: -s
+==137122== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)3
+
+
+
+
+client valgrind report with leader follower:
+
+(base) or@or:~/Desktop/OSFin/OSFinalProject/p5$ valgrind --leak-check=full --show-leak-kinds=all ./client
+==139426== Memcheck, a memory error detector
+==139426== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==139426== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==139426== Command: ./client
+==139426== 
+[Client] Connected to server at 127.0.0.1:12345
+Enter command (or QUIT/EXIT): CREATE_GRAPH 5
+ADD_EDGE 0 1 2.0
+ADD_EDGE 0 2 3.0
+ADD_EDGE 1 2 1.0
+ADD_EDGE 1 3 4.0
+ADD_EDGE 2 4 5.0
+ADD_EDGE 3 4 1.0
+SET_ALG KRUSKAL
+BUILD_MST
+GET_WEIGHT
+GET_DIAMETER
+GET_AVG_DIST
+QUIT
+
+[Server Reply] Graph created with 5 vertices.
+
+Enter command (or QUIT/EXIT): [Server Reply] Edge added.
+
+Enter command (or QUIT/EXIT): [Server Reply] Edge added.
+
+Enter command (or QUIT/EXIT): [Server Reply] Edge added.
+
+Enter command (or QUIT/EXIT): [Server Reply] Edge added.
+
+Enter command (or QUIT/EXIT): [Server Reply] Edge added.
+
+Enter command (or QUIT/EXIT): [Server Reply] Edge added.
+
+Enter command (or QUIT/EXIT): [Server Reply] Algorithm set to KRUSKAL
+
+Enter command (or QUIT/EXIT): [Server Reply] MST built.
+
+Enter command (or QUIT/EXIT): [Server Reply] MST Weight = 8.000000
+
+Enter command (or QUIT/EXIT): [Server Reply] MST Diameter = 7.000000
+
+Enter command (or QUIT/EXIT): [Server Reply] MST Avg Dist = 3.200000
+
+Enter command (or QUIT/EXIT): [Server Reply] Goodbye!
+
+[Client] Closing.
+==139426== 
+==139426== HEAP SUMMARY:
+==139426==     in use at exit: 0 bytes in 0 blocks
+==139426==   total heap usage: 10 allocs, 10 frees, 74,969 bytes allocated
+==139426== 
+==139426== All heap blocks were freed -- no leaks are possible
+==139426== 
+==139426== For lists of detected and suppressed errors, rerun with: -s
+==139426== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+
+
+
+
+
+
+
+
+(base) or@or:~/Desktop/OSFin/OSFinalProject/p5$ valgrind --leak-check=full --show-leak-kinds=all ./server_leader_follower
+==139340== Memcheck, a memory error detector
+==139340== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==139340== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==139340== Command: ./server_leader_follower
+==139340== 
+[Server] Leader-Follower server listening on 12345
+[Server] Press Enter to stop...
+==139340==
+==139340== HEAP SUMMARY:
+==139340==     in use at exit: 0 bytes in 0 blocks
+==139340==   total heap usage: 125 allocs, 125 frees, 83,023 bytes allocated
+==139340== 
+==139340== All heap blocks were freed -- no leaks are possible
+==139340== 
+==139340== For lists of detected and suppressed errors, rerun with: -s
+==139340== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)

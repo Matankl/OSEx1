@@ -1,0 +1,476 @@
+        -:    0:Source:server_leader_follower.cpp
+        -:    0:Graph:server_leader_follower.gcno
+        -:    0:Data:-
+        -:    0:Runs:0
+        -:    1:/***************************************************************
+        -:    2: * server_leader_follower.cpp
+        -:    3: * Demonstrates a simplified Leader-Follower thread pool pattern.
+        -:    4: *
+        -:    5: * We have multiple threads. One of them is the "leader" that calls
+        -:    6: * accept(). When it gets a connection, it hands off the connection
+        -:    7: * to be processed (potentially by the same or another thread) and
+        -:    8: * another thread becomes leader.
+        -:    9: *
+        -:   10: * This example is simplified. A real leader-follower might revolve
+        -:   11: * around an event loop or use non-blocking I/O. The essence is to
+        -:   12: * show the concurrency pattern with a pool of threads rotating roles.
+        -:   13: ***************************************************************/
+        -:   14:
+        -:   15:#include <iostream>
+        -:   16:#include <string>
+        -:   17:#include <thread>
+        -:   18:#include <vector>
+        -:   19:#include <mutex>
+        -:   20:#include <condition_variable>
+        -:   21:#include <queue>
+        -:   22:#include <unistd.h>   // close(), read(), write()
+        -:   23:#include <sys/socket.h>
+        -:   24:#include <netinet/in.h>
+        -:   25:#include <arpa/inet.h>
+        -:   26:#include <cstring>
+        -:   27:#include <sstream>
+        -:   28:#include <memory>
+        -:   29:#include <functional>
+        -:   30:#include <atomic>
+        -:   31:
+        -:   32:// MST code as before (Graph, MSTAlgorithm, KruskalMST, PrimMST).
+        -:   33:// We'll reuse a global Graph for simplicity, or you might store
+        -:   34:// per-connection state, etc.
+        -:   35:
+        -:   36:class MSTAlgorithm {
+        -:   37:public:
+    #####:   38:    virtual ~MSTAlgorithm()=default;
+------------------
+_ZN12MSTAlgorithmD0Ev:
+    #####:   38:    virtual ~MSTAlgorithm()=default;
+------------------
+_ZN12MSTAlgorithmD2Ev:
+    #####:   38:    virtual ~MSTAlgorithm()=default;
+------------------
+        -:   39:    virtual void buildMST(class Graph& g)=0;
+        -:   40:};
+        -:   41:
+        -:   42:// ========== Graph Class (simplified) ==========
+        -:   43:class Graph {
+        -:   44:private:
+        -:   45:    int V;
+        -:   46:    std::vector<std::tuple<int,int,double>> edges;      // (u, v, w)
+        -:   47:    std::vector<std::vector<std::pair<int,double>>> adj; // adjacency list for the original graph
+        -:   48:
+        -:   49:    std::vector<std::vector<std::pair<int,double>>> mstAdj;
+        -:   50:    double mstWeight;
+        -:   51:    bool   mstBuilt;
+        -:   52:
+        -:   53:    std::unique_ptr<MSTAlgorithm> mstStrategy;
+        -:   54:
+        -:   55:public:
+    #####:   56:    Graph(int vertices = 0)
+    #####:   57:        : V(vertices), mstWeight(0.0), mstBuilt(false)
+        -:   58:    {
+    #####:   59:        adj.resize(V);
+    #####:   60:    }
+        -:   61:
+    #####:   62:    void createGraph(int vertices) {
+    #####:   63:        V = vertices;
+    #####:   64:        edges.clear();
+    #####:   65:        adj.clear();
+    #####:   66:        adj.resize(V);
+    #####:   67:        mstAdj.clear();
+    #####:   68:        mstWeight = 0.0;
+    #####:   69:        mstBuilt  = false;
+    #####:   70:        mstStrategy.reset();
+    #####:   71:    }
+        -:   72:
+    #####:   73:    int getNumVertices() const { return V; }
+        -:   74:
+    #####:   75:    void addEdge(int u, int v, double w) {
+    #####:   76:        if(u<0 || v<0 || u>=V || v>=V) return;
+    #####:   77:        edges.push_back({u,v,w});
+    #####:   78:        adj[u].push_back({v,w});
+    #####:   79:        adj[v].push_back({u,w});
+        -:   80:        // Invalidate MST
+    #####:   81:        mstBuilt = false;
+    #####:   82:        mstAdj.clear();
+        -:   83:    }
+        -:   84:
+    #####:   85:    void setAlgorithm(std::unique_ptr<MSTAlgorithm> alg) {
+    #####:   86:        mstStrategy = std::move(alg);
+    #####:   87:        mstBuilt = false;
+    #####:   88:        mstAdj.clear();
+    #####:   89:    }
+        -:   90:
+    #####:   91:    void buildMST() {
+    #####:   92:        if(!mstStrategy) {
+    #####:   93:            std::cerr << "[Server] No MST algorithm set.\n";
+    #####:   94:            return;
+        -:   95:        }
+    #####:   96:        if(mstBuilt) return; // already built
+    #####:   97:        mstStrategy->buildMST(*this);
+    #####:   98:        mstBuilt = true;
+        -:   99:    }
+        -:  100:
+    #####:  101:    bool isMSTBuilt() const { return mstBuilt; }
+    #####:  102:    double getMSTWeight() const { return mstBuilt ? mstWeight : -1.0; }
+    #####:  103:    void setMSTBuilt(double w) { mstWeight = w; mstBuilt = true; }
+    #####:  104:    std::vector<std::vector<std::pair<int,double>>>& getMSTAdj() { return mstAdj; }
+    #####:  105:    void initMSTAdj() { mstAdj.clear(); mstAdj.resize(V); }
+        -:  106:
+    #####:  107:    const std::vector<std::tuple<int,int,double>>& getEdges() const { return edges; }
+    #####:  108:    const std::vector<std::vector<std::pair<int,double>>>& getAdj() const { return adj; }
+        -:  109:
+        -:  110:    // BFS in MST
+    #####:  111:    std::vector<double> bfsDistances(int start) {
+    #####:  112:        std::vector<double> dist(V, 1e15);
+    #####:  113:        dist[start] = 0.0;
+    #####:  114:        std::queue<int>q;
+    #####:  115:        q.push(start);
+        -:  116:
+    #####:  117:        while(!q.empty()) {
+    #####:  118:            int u = q.front(); q.pop();
+    #####:  119:            for(auto &pr : mstAdj[u]) {
+    #####:  120:                int nxt = pr.first;
+    #####:  121:                double w = pr.second;
+    #####:  122:                if(dist[u] + w < dist[nxt]) {
+    #####:  123:                    dist[nxt] = dist[u] + w;
+    #####:  124:                    q.push(nxt);
+        -:  125:                }
+        -:  126:            }
+        -:  127:        }
+    #####:  128:        return dist;
+    #####:  129:    }
+        -:  130:
+    #####:  131:    double getLongestDistance() {
+    #####:  132:        if(!mstBuilt || V==0) return 0.0;
+    #####:  133:        auto d0 = bfsDistances(0);
+    #####:  134:        int farthest = 0;
+    #####:  135:        for(int i=0; i<V; i++) {
+    #####:  136:            if(d0[i] > d0[farthest]) farthest = i;
+        -:  137:        }
+    #####:  138:        auto d1 = bfsDistances(farthest);
+    #####:  139:        double diam = 0.0;
+    #####:  140:        for(auto dd : d1) { if(dd>diam) diam=dd; }
+    #####:  141:        return diam;
+    #####:  142:    }
+        -:  143:
+    #####:  144:    double getAverageDistance() {
+    #####:  145:        if(!mstBuilt || V==0) return 0.0;
+    #####:  146:        long long pairCount = (long long)V*(long long)V;
+    #####:  147:        double sum = 0.0;
+    #####:  148:        for(int i=0; i<V; i++){
+    #####:  149:            auto dist = bfsDistances(i);
+    #####:  150:            for(auto d : dist) sum += d;
+    #####:  151:        }
+    #####:  152:        return sum / (double)pairCount;
+        -:  153:    }
+        -:  154:};
+        -:  155:
+        -:  156:// ====== Kruskal Implementation ======
+        -:  157:class KruskalMST : public MSTAlgorithm {
+        -:  158:private:
+        -:  159:    class DisjointSet {
+        -:  160:    private:
+        -:  161:        std::vector<int> parent, rankSet;
+        -:  162:    public:
+    #####:  163:        DisjointSet(int n){
+    #####:  164:            parent.resize(n); rankSet.resize(n,0);
+    #####:  165:            for(int i=0;i<n;i++) parent[i]=i;
+    #####:  166:        }
+    #####:  167:        int find(int u){
+    #####:  168:            if(parent[u]!=u) parent[u]=find(parent[u]);
+    #####:  169:            return parent[u];
+        -:  170:        }
+    #####:  171:        void unify(int u,int v){
+    #####:  172:            int ru=find(u),rv=find(v);
+    #####:  173:            if(ru!=rv){
+    #####:  174:                if(rankSet[ru]>rankSet[rv]) parent[rv]=ru;
+    #####:  175:                else if(rankSet[ru]<rankSet[rv]) parent[ru]=rv;
+    #####:  176:                else {parent[rv]=ru; rankSet[ru]++;}
+        -:  177:            }
+    #####:  178:        }
+        -:  179:    };
+        -:  180:public:
+    #####:  181:    void buildMST(Graph &g) override {
+    #####:  182:        int V = g.getNumVertices();
+    #####:  183:        auto &allEdges = g.getEdges();
+    #####:  184:        std::vector<std::tuple<int,int,double>> edges(allEdges.begin(), allEdges.end());
+    #####:  185:        std::sort(edges.begin(), edges.end(), [](auto &e1, auto &e2){
+    #####:  186:            return std::get<2>(e1)<std::get<2>(e2);
+        -:  187:        });
+    #####:  188:        g.initMSTAdj();
+    #####:  189:        double totalW = 0.0;
+    #####:  190:        DisjointSet ds(V);
+    #####:  191:        int used=0;
+    #####:  192:        for(auto &e : edges){
+    #####:  193:            int u=std::get<0>(e),v=std::get<1>(e);
+    #####:  194:            double w=std::get<2>(e);
+    #####:  195:            if(ds.find(u)!=ds.find(v)){
+    #####:  196:                ds.unify(u,v);
+    #####:  197:                g.getMSTAdj()[u].push_back({v,w});
+    #####:  198:                g.getMSTAdj()[v].push_back({u,w});
+    #####:  199:                totalW+=w;
+    #####:  200:                used++;
+    #####:  201:                if(used==V-1) break;
+        -:  202:            }
+        -:  203:        }
+    #####:  204:        g.setMSTBuilt(totalW);
+    #####:  205:    }
+        -:  206:};
+        -:  207:
+        -:  208:// ====== Prim Implementation ======
+        -:  209:class PrimMST : public MSTAlgorithm {
+        -:  210:public:
+    #####:  211:    void buildMST(Graph &g) override {
+    #####:  212:        int V=g.getNumVertices();
+    #####:  213:        if(V==0){
+    #####:  214:            g.setMSTBuilt(0.0);
+    #####:  215:            return;
+        -:  216:        }
+    #####:  217:        g.initMSTAdj();
+    #####:  218:        auto &mstAdj = g.getMSTAdj();
+    #####:  219:        auto &origAdj= g.getAdj();
+        -:  220:
+    #####:  221:        std::vector<bool> inMST(V,false);
+        -:  222:        typedef std::tuple<double,int,int> EdgeInfo;
+    #####:  223:        std::priority_queue<EdgeInfo,std::vector<EdgeInfo>,std::greater<EdgeInfo>> pq;
+        -:  224:
+    #####:  225:        inMST[0] = true;
+    #####:  226:        for(auto &nbr : origAdj[0]){
+    #####:  227:            pq.push({nbr.second,nbr.first,0});
+        -:  228:        }
+    #####:  229:        double totalW=0.0;
+    #####:  230:        int edgesUsed=0;
+        -:  231:
+    #####:  232:        while(!pq.empty() && edgesUsed<(V-1)){
+    #####:  233:            auto [w,node,par] = pq.top(); pq.pop();
+    #####:  234:            if(inMST[node]) continue;
+    #####:  235:            inMST[node]=true;
+    #####:  236:            edgesUsed++;
+    #####:  237:            totalW+=w;
+    #####:  238:            mstAdj[par].push_back({node,w});
+    #####:  239:            mstAdj[node].push_back({par,w});
+        -:  240:
+    #####:  241:            for(auto &ed : origAdj[node]){
+    #####:  242:                if(!inMST[ed.first]){
+    #####:  243:                    pq.push({ed.second, ed.first, node});
+        -:  244:                }
+        -:  245:            }
+        -:  246:        }
+    #####:  247:        g.setMSTBuilt(totalW);
+    #####:  248:    }
+        -:  249:};
+        -:  250:
+        -:  251:static Graph globalGraph;
+        -:  252:
+        -:  253:// Helper to set MST Algorithm by name
+    #####:  254:static bool setAlgorithm(const std::string &name) {
+    #####:  255:    if(name=="KRUSKAL") {
+    #####:  256:        globalGraph.setAlgorithm(std::make_unique<KruskalMST>());
+    #####:  257:        return true;
+    #####:  258:    } else if(name=="PRIM") {
+    #####:  259:        globalGraph.setAlgorithm(std::make_unique<PrimMST>());
+    #####:  260:        return true;
+        -:  261:    }
+    #####:  262:    return false;
+        -:  263:}
+        -:  264:
+        -:  265:// We'll define a function to handle an *accepted* client socket
+    #####:  266:static void processClient(int clientFD) {
+    #####:  267:    const int BUF_SIZE=1024;
+        -:  268:    char buffer[BUF_SIZE];
+        -:  269:    while(true) {
+    #####:  270:        memset(buffer,0,BUF_SIZE);
+    #####:  271:        int n=read(clientFD,buffer,BUF_SIZE-1);
+    #####:  272:        if(n<=0){
+        -:  273:            // client closed or error
+    #####:  274:            std::cerr<<"[Server] Client disconnected.\n";
+    #####:  275:            break;
+        -:  276:        }
+    #####:  277:        std::string cmdLine(buffer);
+    #####:  278:        std::stringstream ss(cmdLine);
+    #####:  279:        std::string cmd;
+    #####:  280:        ss >> cmd;
+    #####:  281:        for(auto &c:cmd) c=toupper(c);
+        -:  282:
+    #####:  283:        std::string response;
+    #####:  284:        if(cmd=="CREATE_GRAPH"){
+    #####:  285:            int v; ss>>v;
+    #####:  286:            globalGraph.createGraph(v);
+    #####:  287:            response="Graph created with "+std::to_string(v)+" vertices.\n";
+        -:  288:        }
+    #####:  289:        else if(cmd=="ADD_EDGE"){
+    #####:  290:            int u,v; double w; ss>>u>>v>>w;
+    #####:  291:            globalGraph.addEdge(u,v,w);
+    #####:  292:            response="Edge added.\n";
+        -:  293:        }
+    #####:  294:        else if(cmd=="SET_ALG"){
+    #####:  295:            std::string algName; ss>>algName;
+    #####:  296:            for(auto &c:algName) c=toupper(c);
+    #####:  297:            if(!setAlgorithm(algName)) {
+    #####:  298:                response="Unknown MST algorithm.\n";
+        -:  299:            } else {
+    #####:  300:                response="Algorithm set to "+algName+"\n";
+        -:  301:            }
+    #####:  302:        }
+    #####:  303:        else if(cmd=="BUILD_MST"){
+    #####:  304:            globalGraph.buildMST();
+    #####:  305:            if(!globalGraph.isMSTBuilt()) response="Build MST failed.\n";
+    #####:  306:            else response="MST built.\n";
+        -:  307:        }
+    #####:  308:        else if(cmd=="GET_WEIGHT"){
+    #####:  309:            double w=globalGraph.getMSTWeight();
+    #####:  310:            if(w<0) response="MST not built.\n";
+    #####:  311:            else response="MST Weight = "+std::to_string(w)+"\n";
+        -:  312:        }
+    #####:  313:        else if(cmd=="GET_DIAMETER"){
+    #####:  314:            if(!globalGraph.isMSTBuilt()) response="MST not built.\n";
+        -:  315:            else {
+    #####:  316:                double d=globalGraph.getLongestDistance();
+    #####:  317:                response="MST Diameter = "+std::to_string(d)+"\n";
+        -:  318:            }
+        -:  319:        }
+    #####:  320:        else if(cmd=="GET_AVG_DIST"){
+    #####:  321:            if(!globalGraph.isMSTBuilt()) response="MST not built.\n";
+        -:  322:            else {
+    #####:  323:                double ad=globalGraph.getAverageDistance();
+    #####:  324:                response="MST Avg Dist = "+std::to_string(ad)+"\n";
+        -:  325:            }
+        -:  326:        }
+    #####:  327:        else if(cmd=="QUIT" || cmd=="EXIT"){
+    #####:  328:            response="Goodbye!\n";
+    #####:  329:            write(clientFD,response.c_str(),response.size());
+    #####:  330:            break;
+        -:  331:        }
+        -:  332:        else {
+    #####:  333:            response="Unknown command.\n";
+        -:  334:        }
+    #####:  335:        if(!response.empty()){
+    #####:  336:            write(clientFD,response.c_str(), response.size());
+        -:  337:        }
+    #####:  338:    }
+    #####:  339:    close(clientFD);
+    #####:  340:}
+        -:  341:
+        -:  342:// ------------------ Leader-Follower Thread Pool ------------------
+        -:  343:class LeaderFollowerServer {
+        -:  344:private:
+        -:  345:    int serverFD;
+        -:  346:    int port;
+        -:  347:    std::mutex lfMutex;
+        -:  348:    std::condition_variable lfCond;
+        -:  349:    bool stopFlag;
+        -:  350:    int threadCount;
+        -:  351:    // The "leader" is the thread currently calling accept().
+        -:  352:    // The others are "followers" waiting on the condition variable.
+        -:  353:
+        -:  354:public:
+    #####:  355:    LeaderFollowerServer(int p, int numThreads)
+    #####:  356:        : port(p), stopFlag(false), threadCount(numThreads)
+    #####:  357:    {}
+        -:  358:
+    #####:  359:    bool start() {
+    #####:  360:        serverFD = socket(AF_INET, SOCK_STREAM, 0);
+    #####:  361:        if(serverFD<0){
+    #####:  362:            std::cerr<<"[Server] socket() failed\n";
+    #####:  363:            return false;
+        -:  364:        }
+    #####:  365:        int opt=1;
+    #####:  366:        setsockopt(serverFD,SOL_SOCKET,SO_REUSEADDR,&opt,sizeof(opt));
+        -:  367:        sockaddr_in servAddr;
+    #####:  368:        memset(&servAddr,0,sizeof(servAddr));
+    #####:  369:        servAddr.sin_family=AF_INET;
+    #####:  370:        servAddr.sin_addr.s_addr=INADDR_ANY;
+    #####:  371:        servAddr.sin_port=htons(port);
+    #####:  372:        if(bind(serverFD,(sockaddr*)&servAddr,sizeof(servAddr))<0){
+    #####:  373:            std::cerr<<"[Server] bind() failed\n";
+    #####:  374:            close(serverFD);
+    #####:  375:            return false;
+        -:  376:        }
+    #####:  377:        if(listen(serverFD,5)<0){
+    #####:  378:            std::cerr<<"[Server] listen() failed\n";
+    #####:  379:            close(serverFD);
+    #####:  380:            return false;
+        -:  381:        }
+    #####:  382:        std::cout<<"[Server] Leader-Follower server listening on "<<port<<"\n";
+        -:  383:
+        -:  384:        // Create thread pool
+    #####:  385:        for(int i=0; i<threadCount; i++){
+    #####:  386:            std::thread(&LeaderFollowerServer::threadLoop, this).detach();
+        -:  387:        }
+    #####:  388:        return true;
+        -:  389:    }
+        -:  390:
+    #####:  391:    void stop() {
+        -:  392:        {
+    #####:  393:            std::lock_guard<std::mutex> lk(lfMutex);
+    #####:  394:            stopFlag = true;   // Set the flag
+    #####:  395:        }
+    #####:  396:        lfCond.notify_all();   // Wake up any threads in accept()
+        -:  397:        
+    #####:  398:        if (serverFD >= 0) {   // Close the listening socket if valid
+    #####:  399:            close(serverFD);
+    #####:  400:            serverFD = -1;
+        -:  401:        }
+    #####:  402:    }
+        -:  403:
+        -:  404:
+        -:  405:private:
+        -:  406:    // Each thread runs threadLoop: tries to become leader, accept a connection, then processes it.
+    #####:  407:    void threadLoop() {
+        -:  408:        while (true) {
+    #####:  409:            int clientFD = -1;
+        -:  410:            {
+    #####:  411:                std::unique_lock<std::mutex> lk(lfMutex);
+        -:  412:                
+        -:  413:                // Check if we are asked to stop before calling accept().
+    #####:  414:                if (stopFlag) {
+    #####:  415:                    break;
+        -:  416:                }
+        -:  417:
+        -:  418:                sockaddr_in cliAddr;
+    #####:  419:                socklen_t clilen = sizeof(cliAddr);
+    #####:  420:                clientFD = accept(serverFD, (sockaddr*)&cliAddr, &clilen);
+        -:  421:
+    #####:  422:                if (clientFD < 0) {
+        -:  423:                    // accept() failed or was interrupted
+    #####:  424:                    if (stopFlag) {
+        -:  425:                        // If we're stopping, break out
+    #####:  426:                        break;
+        -:  427:                    }
+        -:  428:                    // otherwise, keep looping
+    #####:  429:                    continue;
+        -:  430:                }
+        -:  431:
+        -:  432:                // Hand off "leader" role so another thread can accept next
+    #####:  433:                lfCond.notify_one();
+    #####:  434:            }
+        -:  435:
+        -:  436:            // Process the client outside the lock
+    #####:  437:            processClient(clientFD);
+    #####:  438:        }
+        -:  439:
+    #####:  440:    }
+        -:  441:};
+        -:  442:
+        -:  443:// ------------------ Main ------------------
+    #####:  444:int main(){
+    #####:  445:    const int PORT=12345;
+    #####:  446:    const int NUM_THREADS=2; // you can increase as needed
+    #####:  447:    LeaderFollowerServer server(PORT, NUM_THREADS);
+    #####:  448:    if(!server.start()){
+    #####:  449:        return 1;
+        -:  450:    }
+        -:  451:
+        -:  452:    // The main thread just waits. In a real application,
+        -:  453:    // you might do something else or wait for a signal.
+    #####:  454:    std::cout << "[Server] Press Enter to stop...\n";
+        -:  455:    
+        -:  456:    // Use getline instead of cin.get() to reliably detect an entire line
+    #####:  457:    std::string dummy;
+    #####:  458:    std::getline(std::cin, dummy);
+        -:  459:
+    #####:  460:    std::cout << "[Server] Stopping server...\n";
+    #####:  461:    server.stop();  // triggers stopFlag = true and closes socket
+    #####:  462:    std::cout << "[Server] Stopped.\n";
+    #####:  463:    return 0;
+    #####:  464:}
+        -:  465:

@@ -1,0 +1,516 @@
+        -:    0:Source:server_pipeline.cpp
+        -:    0:Graph:server_pipeline.gcno
+        -:    0:Data:server_pipeline.gcda
+        -:    0:Runs:1
+        -:    1:/**************************************************************
+        -:    2: * server_pipeline.cpp
+        -:    3: * Demonstrates a simple Pipeline pattern with an Active Object.
+        -:    4: *
+        -:    5: * Steps:
+        -:    6: *  1) Main thread (Network I/O) accepts connections, reads requests,
+        -:    7: *     and enqueues them into a "task queue."
+        -:    8: *  2) The ActiveObject runs in its own thread, continuously dequeuing
+        -:    9: *     tasks and processing MST commands.
+        -:   10: *  3) The result is delivered back to the network layer, which sends
+        -:   11: *     it to the client.
+        -:   12: *
+        -:   13: * For simplicity:
+        -:   14: *  - We handle a single client connection at a time in this example.
+        -:   15: *  - The concurrency focus is on pipeline + active object pattern,
+        -:   16: *    not multi-client concurrency. You can extend it for multiple
+        -:   17: *    clients by repeating the same approach in multiple threads or
+        -:   18: *    using nonblocking I/O.
+        -:   19: ***************************************************************/
+        -:   20:
+        -:   21:#include <iostream>
+        -:   22:#include <string>
+        -:   23:#include <sstream>
+        -:   24:#include <vector>
+        -:   25:#include <queue>
+        -:   26:#include <mutex>
+        -:   27:#include <condition_variable>
+        -:   28:#include <thread>
+        -:   29:#include <functional>
+        -:   30:#include <memory>
+        -:   31:#include <atomic>
+        -:   32:#include <unistd.h>   // for close(), read(), write()
+        -:   33:#include <sys/socket.h>
+        -:   34:#include <arpa/inet.h>
+        -:   35:#include <netinet/in.h>
+        -:   36:#include <cstring>    // for memset
+        -:   37:
+        -:   38://----------------------------------------------------------
+        -:   39:// MST & Graph classes (same logic as in previous examples)
+        -:   40://----------------------------------------------------------
+        -:   41:
+        -:   42:// Forward declarations
+        -:   43:class Graph;
+        -:   44:class MSTAlgorithm {
+        -:   45:public:
+       1*:   46:    virtual ~MSTAlgorithm() = default;
+------------------
+_ZN12MSTAlgorithmD0Ev:
+    #####:   46:    virtual ~MSTAlgorithm() = default;
+------------------
+_ZN12MSTAlgorithmD2Ev:
+        1:   46:    virtual ~MSTAlgorithm() = default;
+------------------
+        -:   47:    virtual void buildMST(Graph& graph) = 0;
+        -:   48:};
+        -:   49:
+        -:   50:// ========== Graph Class ==========
+        -:   51:class Graph {
+        -:   52:private:
+        -:   53:    int V;
+        -:   54:    std::vector<std::tuple<int,int,double>> edges;      // (u, v, w)
+        -:   55:    std::vector<std::vector<std::pair<int,double>>> adj; // adjacency list for the original graph
+        -:   56:
+        -:   57:    std::vector<std::vector<std::pair<int,double>>> mstAdj;
+        -:   58:    double mstWeight;
+        -:   59:    bool   mstBuilt;
+        -:   60:
+        -:   61:    std::unique_ptr<MSTAlgorithm> mstStrategy;
+        -:   62:
+        -:   63:public:
+        1:   64:    Graph(int vertices = 0)
+        1:   65:        : V(vertices), mstWeight(0.0), mstBuilt(false)
+        -:   66:    {
+        1:   67:        adj.resize(V);
+        1:   68:    }
+        -:   69:
+        1:   70:    void createGraph(int vertices) {
+        1:   71:        V = vertices;
+        1:   72:        edges.clear();
+        1:   73:        adj.clear();
+        1:   74:        adj.resize(V);
+        1:   75:        mstAdj.clear();
+        1:   76:        mstWeight = 0.0;
+        1:   77:        mstBuilt  = false;
+        1:   78:        mstStrategy.reset();
+        1:   79:    }
+        -:   80:
+        1:   81:    int getNumVertices() const { return V; }
+        -:   82:
+        6:   83:    void addEdge(int u, int v, double w) {
+       6*:   84:        if(u<0 || v<0 || u>=V || v>=V) return;
+        6:   85:        edges.push_back({u,v,w});
+        6:   86:        adj[u].push_back({v,w});
+        6:   87:        adj[v].push_back({u,w});
+        -:   88:        // Invalidate MST
+        6:   89:        mstBuilt = false;
+        6:   90:        mstAdj.clear();
+        -:   91:    }
+        -:   92:
+        1:   93:    void setAlgorithm(std::unique_ptr<MSTAlgorithm> alg) {
+        1:   94:        mstStrategy = std::move(alg);
+        1:   95:        mstBuilt = false;
+        1:   96:        mstAdj.clear();
+        1:   97:    }
+        -:   98:
+        1:   99:    void buildMST() {
+        1:  100:        if(!mstStrategy) {
+    #####:  101:            std::cerr << "[Server] No MST algorithm set.\n";
+    #####:  102:            return;
+        -:  103:        }
+       1*:  104:        if(mstBuilt) return; // already built
+        1:  105:        mstStrategy->buildMST(*this);
+        1:  106:        mstBuilt = true;
+        -:  107:    }
+        -:  108:
+        3:  109:    bool isMSTBuilt() const { return mstBuilt; }
+       1*:  110:    double getMSTWeight() const { return mstBuilt ? mstWeight : -1.0; }
+        1:  111:    void setMSTBuilt(double w) { mstWeight = w; mstBuilt = true; }
+        8:  112:    std::vector<std::vector<std::pair<int,double>>>& getMSTAdj() { return mstAdj; }
+        1:  113:    void initMSTAdj() { mstAdj.clear(); mstAdj.resize(V); }
+        -:  114:
+        1:  115:    const std::vector<std::tuple<int,int,double>>& getEdges() const { return edges; }
+    #####:  116:    const std::vector<std::vector<std::pair<int,double>>>& getAdj() const { return adj; }
+        -:  117:
+        -:  118:    // BFS in MST
+        7:  119:    std::vector<double> bfsDistances(int start) {
+        7:  120:        std::vector<double> dist(V, 1e15);
+        7:  121:        dist[start] = 0.0;
+        7:  122:        std::queue<int>q;
+        7:  123:        q.push(start);
+        -:  124:
+       42:  125:        while(!q.empty()) {
+       35:  126:            int u = q.front(); q.pop();
+       91:  127:            for(auto &pr : mstAdj[u]) {
+       56:  128:                int nxt = pr.first;
+       56:  129:                double w = pr.second;
+       56:  130:                if(dist[u] + w < dist[nxt]) {
+       28:  131:                    dist[nxt] = dist[u] + w;
+       28:  132:                    q.push(nxt);
+        -:  133:                }
+        -:  134:            }
+        -:  135:        }
+       14:  136:        return dist;
+        7:  137:    }
+        -:  138:
+        1:  139:    double getLongestDistance() {
+       1*:  140:        if(!mstBuilt || V==0) return 0.0;
+        1:  141:        auto d0 = bfsDistances(0);
+        1:  142:        int farthest = 0;
+        6:  143:        for(int i=0; i<V; i++) {
+        5:  144:            if(d0[i] > d0[farthest]) farthest = i;
+        -:  145:        }
+        1:  146:        auto d1 = bfsDistances(farthest);
+        1:  147:        double diam = 0.0;
+        6:  148:        for(auto dd : d1) { if(dd>diam) diam=dd; }
+        1:  149:        return diam;
+        1:  150:    }
+        -:  151:
+        1:  152:    double getAverageDistance() {
+       1*:  153:        if(!mstBuilt || V==0) return 0.0;
+        1:  154:        long long pairCount = (long long)V*(long long)V;
+        1:  155:        double sum = 0.0;
+        6:  156:        for(int i=0; i<V; i++){
+        5:  157:            auto dist = bfsDistances(i);
+       30:  158:            for(auto d : dist) sum += d;
+        5:  159:        }
+        1:  160:        return sum / (double)pairCount;
+        -:  161:    }
+        -:  162:};
+        -:  163:
+        -:  164:// ====== Kruskal Implementation ======
+        -:  165:class KruskalMST : public MSTAlgorithm {
+        -:  166:private:
+        -:  167:    class DisjointSet {
+        -:  168:    private:
+        -:  169:        std::vector<int> parent, rankSet;
+        -:  170:    public:
+        1:  171:        DisjointSet(int n){
+        1:  172:            parent.resize(n); rankSet.resize(n,0);
+        6:  173:            for(int i=0;i<n;i++) parent[i]=i;
+        1:  174:        }
+       20:  175:        int find(int u){
+       20:  176:            if(parent[u]!=u) parent[u]=find(parent[u]);
+       20:  177:            return parent[u];
+        -:  178:        }
+        4:  179:        void unify(int u,int v){
+        4:  180:            int ru=find(u),rv=find(v);
+        4:  181:            if(ru!=rv){
+       4*:  182:                if(rankSet[ru]>rankSet[rv]) parent[rv]=ru;
+        4:  183:                else if(rankSet[ru]<rankSet[rv]) parent[ru]=rv;
+        3:  184:                else {parent[rv]=ru; rankSet[ru]++;}
+        -:  185:            }
+        4:  186:        }
+        -:  187:    };
+        -:  188:public:
+        1:  189:    void buildMST(Graph &g) override {
+        1:  190:        int V = g.getNumVertices();
+        1:  191:        auto &allEdges = g.getEdges();
+        1:  192:        std::vector<std::tuple<int,int,double>> edges(allEdges.begin(), allEdges.end());
+        1:  193:        std::sort(edges.begin(), edges.end(), [](auto &e1, auto &e2){
+       13:  194:            return std::get<2>(e1)<std::get<2>(e2);
+        -:  195:        });
+        1:  196:        g.initMSTAdj();
+        1:  197:        double totalW = 0.0;
+        1:  198:        DisjointSet ds(V);
+        1:  199:        int used=0;
+        5:  200:        for(auto &e : edges){
+        5:  201:            int u=std::get<0>(e),v=std::get<1>(e);
+        5:  202:            double w=std::get<2>(e);
+        5:  203:            if(ds.find(u)!=ds.find(v)){
+        4:  204:                ds.unify(u,v);
+        4:  205:                g.getMSTAdj()[u].push_back({v,w});
+        4:  206:                g.getMSTAdj()[v].push_back({u,w});
+        4:  207:                totalW+=w;
+        4:  208:                used++;
+        4:  209:                if(used==V-1) break;
+        -:  210:            }
+        -:  211:        }
+        1:  212:        g.setMSTBuilt(totalW);
+        1:  213:    }
+        -:  214:};
+        -:  215:
+        -:  216:// ====== Prim Implementation ======
+        -:  217:class PrimMST : public MSTAlgorithm {
+        -:  218:public:
+    #####:  219:    void buildMST(Graph &g) override {
+    #####:  220:        int V=g.getNumVertices();
+    #####:  221:        if(V==0){
+    #####:  222:            g.setMSTBuilt(0.0);
+    #####:  223:            return;
+        -:  224:        }
+    #####:  225:        g.initMSTAdj();
+    #####:  226:        auto &mstAdj = g.getMSTAdj();
+    #####:  227:        auto &origAdj= g.getAdj();
+        -:  228:
+    #####:  229:        std::vector<bool> inMST(V,false);
+        -:  230:        typedef std::tuple<double,int,int> EdgeInfo;
+    #####:  231:        std::priority_queue<EdgeInfo,std::vector<EdgeInfo>,std::greater<EdgeInfo>> pq;
+        -:  232:
+    #####:  233:        inMST[0] = true;
+    #####:  234:        for(auto &nbr : origAdj[0]){
+    #####:  235:            pq.push({nbr.second,nbr.first,0});
+        -:  236:        }
+    #####:  237:        double totalW=0.0;
+    #####:  238:        int edgesUsed=0;
+        -:  239:
+    #####:  240:        while(!pq.empty() && edgesUsed<(V-1)){
+    #####:  241:            auto [w,node,par] = pq.top(); pq.pop();
+    #####:  242:            if(inMST[node]) continue;
+    #####:  243:            inMST[node]=true;
+    #####:  244:            edgesUsed++;
+    #####:  245:            totalW+=w;
+    #####:  246:            mstAdj[par].push_back({node,w});
+    #####:  247:            mstAdj[node].push_back({par,w});
+        -:  248:
+    #####:  249:            for(auto &ed : origAdj[node]){
+    #####:  250:                if(!inMST[ed.first]){
+    #####:  251:                    pq.push({ed.second, ed.first, node});
+        -:  252:                }
+        -:  253:            }
+        -:  254:        }
+    #####:  255:        g.setMSTBuilt(totalW);
+    #####:  256:    }
+        -:  257:};
+        -:  258:
+        -:  259://----------------------------------------------------------
+        -:  260:// Active Object & Pipeline Implementation
+        -:  261://----------------------------------------------------------
+        -:  262:
+        -:  263:// A "Task" is something we want the ActiveObject to process:
+        -:  264://   - Contains the command string from the client
+        -:  265://   - A way to store the response (string)
+        -:  266:struct Task {
+        -:  267:    std::string command;       // e.g. "ADD_EDGE 0 1 2.0"
+        -:  268:    std::string result;        // the processed result (server response)
+        -:  269:    int clientSocket;          // where we send result
+        -:  270:};
+        -:  271:
+        -:  272:// ActiveObject class: runs in its own thread, processes tasks from a queue
+        -:  273:class ActiveObject {
+        -:  274:private:
+        -:  275:    std::thread worker;
+        -:  276:    std::mutex qMutex;
+        -:  277:    std::condition_variable qCV;
+        -:  278:    std::queue<std::shared_ptr<Task>> taskQueue;
+        -:  279:    std::atomic<bool> stopFlag{false};
+        -:  280:
+        -:  281:public:
+        -:  282:    // We'll store references to the *shared* MST "Graph" here:
+        -:  283:    Graph &graph;
+        -:  284:
+        1:  285:    ActiveObject(Graph &g) : graph(g) {
+        -:  286:        // Launch worker thread
+        1:  287:        worker = std::thread(&ActiveObject::run, this);
+        1:  288:    }
+        -:  289:
+        1:  290:    ~ActiveObject() {
+        -:  291:        // Signal stop and join worker
+        1:  292:        stopFlag = true;
+        1:  293:        qCV.notify_all();
+        1:  294:        if(worker.joinable()) {
+        1:  295:            worker.join();
+        -:  296:        }
+        1:  297:    }
+        -:  298:
+        -:  299:    // Enqueue a task
+       13:  300:    void submit(std::shared_ptr<Task> task) {
+        -:  301:        {
+       13:  302:            std::lock_guard<std::mutex> lk(qMutex);
+       13:  303:            taskQueue.push(task);
+       13:  304:        }
+       13:  305:        qCV.notify_one();
+       13:  306:    }
+        -:  307:
+        -:  308:private:
+        -:  309:    // Worker thread function
+        1:  310:    void run() {
+       14:  311:        while(!stopFlag) {
+       14:  312:            std::shared_ptr<Task> currentTask;
+        -:  313:            {
+       14:  314:                std::unique_lock<std::mutex> lk(qMutex);
+       42:  315:                qCV.wait(lk, [this]{ return !taskQueue.empty() || stopFlag; });
+       14:  316:                if(stopFlag && taskQueue.empty()) {
+        1:  317:                    break; 
+        -:  318:                }
+       13:  319:                currentTask = taskQueue.front();
+       13:  320:                taskQueue.pop();
+       14:  321:            }
+        -:  322:            // Process the task
+       13:  323:            process(currentTask);
+       14:  324:        }
+        1:  325:    }
+        -:  326:
+        -:  327:    // Actual MST command processing
+       13:  328:    void process(std::shared_ptr<Task> task) {
+        -:  329:        // parse the command
+       13:  330:        std::stringstream ss(task->command);
+       13:  331:        std::string cmd;
+       13:  332:        ss >> cmd;
+        -:  333:        // uppercase
+      127:  334:        for (auto &c : cmd) { c = toupper(c); }
+        -:  335:
+       13:  336:        std::string response;
+        -:  337:
+       13:  338:        if(cmd=="CREATE_GRAPH"){
+        1:  339:            int v; ss >> v;
+        1:  340:            graph.createGraph(v);
+        1:  341:            response = "Graph created with " + std::to_string(v) + " vertices.\n";
+        -:  342:        }
+       12:  343:        else if(cmd=="ADD_EDGE"){
+        -:  344:            int u,v; double w; 
+        6:  345:            ss >> u >> v >> w;
+        6:  346:            graph.addEdge(u,v,w);
+        6:  347:            response = "Edge added (" + std::to_string(u)+","+std::to_string(v)+"), w="+std::to_string(w)+"\n";
+        -:  348:        }
+        6:  349:        else if(cmd=="SET_ALG"){
+        1:  350:            std::string algName; ss >> algName;
+        8:  351:            for(auto &c: algName){ c=toupper(c); }
+        1:  352:            if(algName=="KRUSKAL"){
+        1:  353:                graph.setAlgorithm(std::make_unique<KruskalMST>());
+        1:  354:                response = "Algorithm set to KRUSKAL\n";
+    #####:  355:            } else if(algName=="PRIM"){
+    #####:  356:                graph.setAlgorithm(std::make_unique<PrimMST>());
+    #####:  357:                response = "Algorithm set to PRIM\n";
+        -:  358:            } else {
+    #####:  359:                response = "Unknown algorithm: " + algName + "\n";
+        -:  360:            }
+        1:  361:        }
+        5:  362:        else if(cmd=="BUILD_MST"){
+        1:  363:            graph.buildMST();
+        1:  364:            if(!graph.isMSTBuilt()){
+    #####:  365:                response = "Failed to build MST. Possibly no algorithm set.\n";
+        -:  366:            } else {
+        1:  367:                response = "MST built successfully.\n";
+        -:  368:            }
+        -:  369:        }
+        4:  370:        else if(cmd=="GET_WEIGHT"){
+        1:  371:            double w=graph.getMSTWeight();
+       1*:  372:            if(w<0) response="MST not built yet.\n";
+        1:  373:            else response="MST Weight = " + std::to_string(w) + "\n";
+        -:  374:        }
+        3:  375:        else if(cmd=="GET_DIAMETER"){
+       1*:  376:            if(!graph.isMSTBuilt()) response="MST not built yet.\n";
+        -:  377:            else {
+        1:  378:                double d=graph.getLongestDistance();
+        1:  379:                response = "MST Diameter = " + std::to_string(d) + "\n";
+        -:  380:            }
+        -:  381:        }
+        2:  382:        else if(cmd=="GET_AVG_DIST"){
+       1*:  383:            if(!graph.isMSTBuilt()) response="MST not built yet.\n";
+        -:  384:            else {
+        1:  385:                double avg=graph.getAverageDistance();
+        1:  386:                response = "MST Average Distance = " + std::to_string(avg) + "\n";
+        -:  387:            }
+        -:  388:        }
+       1*:  389:        else if(cmd=="QUIT" || cmd=="EXIT"){
+        1:  390:            response = "Goodbye!\n";
+        -:  391:        }
+        -:  392:        else {
+    #####:  393:            response = "Unknown command: " + cmd + "\n";
+        -:  394:        }
+        -:  395:
+       13:  396:        task->result = response;
+        -:  397:
+        -:  398:        // We could send the response directly here, or pass it to another pipeline stage.
+        -:  399:        // For simplicity, let's send it back now:
+       13:  400:        write(task->clientSocket, response.c_str(), response.size());
+       13:  401:    }
+        -:  402:};
+        -:  403:
+        -:  404://----------------------------------------------------------
+        -:  405:// The Pipeline-Style Server
+        -:  406://----------------------------------------------------------
+        -:  407:static const int PORT = 12345;
+        -:  408:
+        1:  409:int main() {
+        -:  410:    // We'll have a single global Graph
+        1:  411:    static Graph globalGraph;
+        -:  412:
+        -:  413:    // ActiveObject to process MST tasks
+        1:  414:    static ActiveObject activeObj(globalGraph);
+        -:  415:
+        -:  416:    // Socket setup
+        1:  417:    int serverFD = socket(AF_INET, SOCK_STREAM, 0);
+        1:  418:    if(serverFD<0){
+    #####:  419:        std::cerr<<"[Server] socket() failed\n";
+    #####:  420:        return 1;
+        -:  421:    }
+        -:  422:
+        1:  423:    int opt=1;
+        1:  424:    setsockopt(serverFD, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+        -:  425:
+        -:  426:    sockaddr_in servAddr;
+        1:  427:    memset(&servAddr,0,sizeof(servAddr));
+        1:  428:    servAddr.sin_family=AF_INET;
+        1:  429:    servAddr.sin_addr.s_addr=INADDR_ANY;
+        1:  430:    servAddr.sin_port=htons(PORT);
+        -:  431:
+        1:  432:    if(bind(serverFD,(sockaddr*)&servAddr,sizeof(servAddr))<0){
+    #####:  433:        std::cerr<<"[Server] bind() failed\n";
+    #####:  434:        close(serverFD);
+    #####:  435:        return 1;
+        -:  436:    }
+        1:  437:    if(listen(serverFD,1)<0){
+    #####:  438:        std::cerr<<"[Server] listen() failed\n";
+    #####:  439:        close(serverFD);
+    #####:  440:        return 1;
+        -:  441:    }
+        -:  442:
+        1:  443:    std::cout<<"[Server] Pipeline/ActiveObject server listening on port "<<PORT<<"...\n";
+        -:  444:
+        -:  445:    // Accept one client for demonstration
+        -:  446:    sockaddr_in clientAddr;
+        1:  447:    socklen_t clientLen=sizeof(clientAddr);
+        1:  448:    int clientFD=accept(serverFD,(sockaddr*)&clientAddr,&clientLen);
+        1:  449:    if(clientFD<0){
+    #####:  450:        std::cerr<<"[Server] accept() failed\n";
+    #####:  451:        close(serverFD);
+    #####:  452:        return 1;
+        -:  453:    }
+        -:  454:
+        1:  455:    std::cout<<"[Server] Client connected.\n";
+        -:  456:
+        -:  457:    // Read lines from client, create tasks, submit to ActiveObject
+        1:  458:    const int BUF_SIZE=1024;
+        -:  459:    char buffer[BUF_SIZE];
+        -:  460:    while(true){
+       13:  461:        memset(buffer,0,BUF_SIZE);
+       13:  462:        int n=read(clientFD, buffer, BUF_SIZE-1);
+       13:  463:        if(n<=0){
+    #####:  464:            std::cerr<<"[Server] Client disconnected.\n";
+    #####:  465:            break;
+        -:  466:        }
+       13:  467:        std::string cmdLine(buffer);
+        -:  468:        // We check if the user typed QUIT/EXIT => we'll handle that as well
+        -:  469:        // We'll still pass to the active object but also break after.
+        -:  470:
+        -:  471:        // Create a Task
+       13:  472:        auto t = std::make_shared<Task>();
+       13:  473:        t->command      = cmdLine;
+       13:  474:        t->clientSocket = clientFD;
+        -:  475:
+        -:  476:        // Submit it to the active object
+       13:  477:        activeObj.submit(t);
+        -:  478:
+        -:  479:        // If the command was QUIT/EXIT, let's close
+        -:  480:        // (We *could* wait for the active object to respond first, which it will do.)
+       13:  481:        if(cmdLine.find("QUIT")==0 || cmdLine.find("EXIT")==0){
+        -:  482:            // We'll just break after sending
+        1:  483:            break;
+        -:  484:        }
+       26:  485:    }
+        -:  486:
+        1:  487:    close(clientFD);
+        1:  488:    close(serverFD);
+        1:  489:    return 0;
+        -:  490:}
+
+
+
+
+
+
+
+(base) or@or:~/Desktop/OSFin/OSFinalProject/p5$ gcov server_pipeline.cpp
+gcov graph.cpp
+File 'server_pipeline.cpp'
+Lines executed:80.99% of 263
+Creating 'server_pipeline.cpp.gcov'
+
+
+

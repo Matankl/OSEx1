@@ -1,0 +1,107 @@
+matankl@matankl-VMware-Virtual-Platform:~/code/OSEx4/p5$ gdb ./hello
+GNU gdb (Ubuntu 15.0.50.20240403-0ubuntu1) 15.0.50.20240403-git
+Copyright (C) 2024 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+Type "show copying" and "show warranty" for details.
+This GDB was configured as "x86_64-linux-gnu".
+Type "show configuration" for configuration details.
+For bug reporting instructions, please see:
+<https://www.gnu.org/software/gdb/bugs/>.
+Find the GDB manual and other documentation resources online at:
+    <http://www.gnu.org/software/gdb/documentation/>.
+
+For help, type "help".
+Type "apropos word" to search for commands related to "word"...
+Reading symbols from ./hello...
+(gdb) target remote | /usr/bin/vgdb --pid=28701
+Remote debugging using | /usr/bin/vgdb --pid=28701
+relaying data between gdb and process 28701
+warning: remote target does not support file transfer, attempting to access files from local filesystem.
+Reading symbols from /usr/libexec/valgrind/vgpreload_core-amd64-linux.so...
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) y
+Debuginfod has been enabled.
+To make this setting permanent, add 'set debuginfod enabled on' to .gdbinit.
+Downloading separate debug info for /usr/libexec/valgrind/vgpreload_core-amd64-linux.so
+Reading symbols from /home/matankl/.cache/debuginfod_client/4fcc072a927c07cd2072489d8f70384ceec60f5b/debuginfo...
+/usr/share/gdb/auto-load/valgrind-monitor-def.py:214: SyntaxWarning: invalid escape sequence '\['
+  if re.fullmatch("^0x[0123456789ABCDEFabcdef]+\[[^\[\]]+\]$", arg_str):
+Loaded /usr/share/gdb/auto-load/valgrind-monitor.py
+Type "help valgrind" for more info.
+Reading symbols from /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so...
+Downloading separate debug info for /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so
+Reading symbols from /home/matankl/.cache/debuginfod_client/744683d6cb963e75add178d0ead2b408ce65cfc9/debuginfo...
+Reading symbols from /lib/x86_64-linux-gnu/libc.so.6...
+Reading symbols from /usr/lib/debug/.build-id/6d/64b17fbac799e68da7ebd9985ddf9b5cb375e6.debug...
+Reading symbols from /lib64/ld-linux-x86-64.so.2...
+Reading symbols from /usr/lib/debug/.build-id/35/3e1b6cb0eebc08cf3ff812eae8a51b4efd684e.debug...
+0x000000000010966c in main (argc=1, argv=0x1ffefff6f8) at hello.c:16
+16              if(string_so_far != (char *)0)
+(gdb) n
+18              else *string = '\0';
+(gdb) n
+19              strcat(string, argv[i]);
+(gdb) n
+20              if(i < argc-1) strcat(string, " ");
+(gdb) n
+11          for(i=0; i<argc; i++) {
+(gdb) n
+23          printf("You entered: %s\n", string_so_far);
+(gdb) n
+24          return (0);
+(gdb) n
+Download failed: Invalid argument.  Continuing without source file ./csu/../sysdeps/nptl/libc_start_call_main.h.
+__libc_start_call_main (main=main@entry=0x1095c9 <main>, argc=argc@entry=1, 
+    argv=argv@entry=0x1ffefff6f8) at ../sysdeps/nptl/libc_start_call_main.h:74
+warning: 74     ../sysdeps/nptl/libc_start_call_main.h: No such file or directory
+(gdb) n
+
+Program terminated with signal SIGPROF, Profiling timer expired.
+The program no longer exists.
+
+
+
+this is the teminal of valgrind
+
+matankl@matankl-VMware-Virtual-Platform:~/code/OSEx4/p5$ valgrind --vgdb-error=0 ./hello
+==28701== TO DEBUG THIS PROCESS USING GDB: start GDB like this
+==28701==   /path/to/gdb ./hello
+==28701== and then give GDB the following command
+==28701==   target remote | /usr/bin/vgdb --pid=28701
+==28701== --pid is optional if only one valgrind process is running
+==28701== 
+==28701== Conditional jump or move depends on uninitialised value(s)
+==28701==    at 0x10966C: main (hello.c:16)
+==28701== 
+==28701== (action on error) vgdb me ... 
+==28701== Continuing ...
+You entered: ./hello
+==28701== 
+==28701== Process terminating with default action of signal 27 (SIGPROF)
+==28701==    at 0x49868B2: __open_nocancel (open64_nocancel.c:39)
+==28701==    by 0x499685F: write_gmon (gmon.c:393)
+==28701==    by 0x499720A: _mcleanup (gmon.c:467)
+==28701==    by 0x48B1A65: __run_exit_handlers (exit.c:108)
+==28701==    by 0x48B1BAD: exit (exit.c:138)
+==28701==    by 0x48941D0: (below main) (libc_start_call_main.h:74)
+==28701== 
+==28701== HEAP SUMMARY:
+==28701==     in use at exit: 26,489 bytes in 3 blocks
+==28701==   total heap usage: 3 allocs, 0 frees, 26,489 bytes allocated
+==28701== 
+==28701== LEAK SUMMARY:
+==28701==    definitely lost: 9 bytes in 1 blocks
+==28701==    indirectly lost: 0 bytes in 0 blocks
+==28701==      possibly lost: 0 bytes in 0 blocks
+==28701==    still reachable: 26,480 bytes in 2 blocks
+==28701==         suppressed: 0 bytes in 0 blocks
+==28701== Rerun with --leak-check=full to see details of leaked memory
+==28701== 
+==28701== Use --track-origins=yes to see where uninitialised values come from
+==28701== For lists of detected and suppressed errors, rerun with: -s
+==28701== ERROR SUMMARY: 1 errors from 1 contexts (suppressed: 0 from 0)
+Profiling timer expired
