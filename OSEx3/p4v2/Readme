@@ -1,0 +1,8 @@
+the methos to use by the client are:
+
+Newgraph n m
+Kosaraju
+Newedge i j
+Removeedge i j
+
+dont use the coma!
